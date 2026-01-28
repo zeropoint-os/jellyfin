@@ -9,7 +9,7 @@ terraform {
 
 variable "zp_module_id" {
   type        = string
-  default     = "ollama"
+  default     = "jellyfin"
   description = "Unique identifier for this module instance (user-defined, freeform)"
 }
 
@@ -35,8 +35,26 @@ variable "zp_module_storage" {
   description = "Host path for persistent storage (injected by zeropoint)"
 }
 
-# Build Ollama image from local Dockerfile
-resource "docker_image" "ollama" {
+variable "config_dir" {
+  type        = string
+  default     = null
+  description = "Jellyfin configuration directory"
+}
+
+variable "cache_dir" {
+  type        = string
+  default     = null
+  description = "Jellyfin cache/transcoding directory"
+}
+
+variable "media_library_path" {
+  type        = string
+  default     = null
+  description = "Media library path"
+}
+
+# Build Jellyfin image from local Dockerfile
+resource "docker_image" "jellyfin" {
   name = "${var.zp_module_id}:latest"
   build {
     context    = path.module
@@ -46,10 +64,10 @@ resource "docker_image" "ollama" {
   keep_locally = true
 }
 
-# Main Ollama container (no host port binding)
-resource "docker_container" "ollama_main" {
+# Main Jellyfin container (no host port binding)
+resource "docker_container" "jellyfin_main" {
   name  = "${var.zp_module_id}-main"
-  image = docker_image.ollama.image_id
+  image = docker_image.jellyfin.image_id
 
   # Network configuration (provided by zeropoint)
   networks_advanced {
@@ -59,47 +77,56 @@ resource "docker_container" "ollama_main" {
   # Restart policy
   restart = "unless-stopped"
 
-  # GPU access (conditional based on vendor)
+  # GPU access (conditional based on vendor) - used for transcoding
   runtime = var.zp_gpu_vendor == "nvidia" ? "nvidia" : null
   gpus    = var.zp_gpu_vendor != "" ? "all" : null
 
   # Environment variables
   env = [
-    "OLLAMA_HOST=0.0.0.0",
+    "JELLYFIN_DATA_DIR=/config",
+    "JELLYFIN_CACHE_DIR=${var.cache_dir != null ? var.cache_dir : "${var.zp_module_storage}/.cache"}",
   ]
 
   # Persistent storage
+  # Configuration
   volumes {
-    host_path      = "${var.zp_module_storage}/.ollama"
-    container_path = "/root/.ollama"
+    host_path      = var.config_dir != null ? var.config_dir : "${var.zp_module_storage}/.config"
+    container_path = "/config"
+  }
+  
+  # Cache/Transcoding
+  volumes {
+    host_path      = var.cache_dir != null ? var.cache_dir : "${var.zp_module_storage}/.cache"
+    container_path = "/cache"
+  }
+  
+  # Media Library
+  volumes {
+    host_path      = var.media_library_path != null ? var.media_library_path : "${var.zp_module_storage}/media"
+    container_path = "/media"
+    read_only      = true
   }
 
   # Ports exposed internally (no host binding)
-  # Port 11434 is accessible via service discovery (DNS)
+  # Port 8096 is accessible via service discovery (DNS)
 }
 
 # Outputs for zeropoint (container resource only)
 output "main" {
-  value       = docker_container.ollama_main
-  description = "Main Ollama container"
+  value       = docker_container.jellyfin_main
+  description = "Main Jellyfin container"
 }
 
 # Service ports for external access (defined but not bound to host)
 output "main_ports" {
   value = {
-    api = {
-      port        = 11434                   # Ollama API port
+    web = {
+      port        = 8096                    # Jellyfin web interface port
       protocol    = "http"                  # The protocol used
       transport   = "tcp"                   # Transport layer
-      description = "Ollama API endpoint"   # Description of the port
+      description = "Jellyfin web interface" # Description of the port
       default     = true                    # Default port for the service
     }
   }
   description = "Service ports for external access"
-}
-
-# Ollama API URL for easy consumption by other modules
-output "ollama_api_url" {
-  value       = "http://${docker_container.ollama_main.name}:11434"
-  description = "Ollama API URL accessible via Docker network"
 }

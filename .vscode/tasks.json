@@ -110,9 +110,9 @@
       }
     },
     {
-      "label": "Test: Run Ollama Test Script",
+      "label": "Test: Run Test Script",
       "type": "shell",
-      "command": "bash ollama-test.sh",
+      "command": "bash test.sh",
       "problemMatcher": [],
       "presentation": {
         "echo": true,

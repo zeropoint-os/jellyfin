@@ -1,7 +1,6 @@
-FROM ollama/ollama:latest
+FROM jellyfin/jellyfin:latest
 
-# Expose the default Ollama port
-EXPOSE 11434
+# Expose the default Jellyfin port
+EXPOSE 8096
 
-# Set the default command to run Ollama server
-CMD ["serve"]
+# Jellyfin server runs by default
