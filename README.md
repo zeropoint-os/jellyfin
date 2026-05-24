@@ -50,10 +50,11 @@ The install will be performed using Docker-in-Docker.
 | `zp_network_name` | string | Pre-created Docker network name (injected by zeropoint) | (required) |
 | `zp_arch` | string | Target architecture: amd64, arm64, etc. (injected by zeropoint) | `"amd64"` |
 | `zp_gpu_vendor` | string | GPU vendor: nvidia, amd, intel, or empty for no GPU (injected by zeropoint) | `""` |
-| `zp_module_storage` | string | Host path for persistent storage (injected by zeropoint) | (required) |
-| `config_dir` | string | Jellyfin configuration directory | `${zp_module_storage}/.config` |
-| `cache_dir` | string | Jellyfin cache/transcoding directory | `${zp_module_storage}/.cache` |
-| `media_library_path` | string | Path to media library | `${zp_module_storage}/media` |
+| `zp_module_dir` | string | Agent's working directory for this module — terraform state + cloned source (injected by zeropoint) | (required) |
+| `zp_storage_dir` | string | Isolated data root for this module — all bind mounts must live under here (injected by zeropoint) | (required) |
+| `config_dir` | string | Jellyfin configuration directory | `${zp_storage_dir}/.config` |
+| `cache_dir` | string | Jellyfin cache/transcoding directory | `${zp_storage_dir}/.cache` |
+| `media_library_path` | string | Path to media library | `${zp_storage_dir}/media` |
 
 ## Outputs
 
@@ -80,7 +81,7 @@ The module creates three persistent volume mounts:
 2. **Cache Directory** (`/cache`): Transcoded files and temporary cache
 3. **Media Library** (`/media`): Read-only mount for media files
 
-All paths default to subdirectories under `zp_module_storage` but can be customized via input variables.
+All paths default to subdirectories under `zp_storage_dir` but can be customized via input variables.
 
 ## Network & Service Discovery
 
