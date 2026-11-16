@@ -28,10 +28,18 @@ curl -X POST http://<zeropoint-node-name>:2370/modules/install \
     "module_id": "jellyfin",
     "arch": "arm64",
     "gpu_vendor": "nvidia",
-    "config_dir": "/data/jellyfin/config",
-    "cache_dir": "/data/jellyfin/cache",
-    "media_library_path": "/data/jellyfin/media"
+    "movies_path": "/data/media/movies",
+    "tv_path": "/data/media/tv",
+    "music_path": "/data/media/music"
   }'
+```
+
+Each configured category is mounted read-only at a stable path under `/media`. Existing installations can continue using `media_library_path` to mount one read-only library root at `/media`:
+
+```json
+{
+  "media_library_path": "/data/jellyfin/media"
+}
 ```
 
 ### Manual (for testing)
@@ -46,15 +54,22 @@ The install will be performed using Docker-in-Docker.
 
 | Name | Type | Description | Default |
 |------|------|-------------|---------|
-| `zp_app_id` | string | Unique identifier for this app instance (injected by zeropoint) | `"jellyfin"` |
+| `zp_module_id` | string | Unique identifier for this module instance (injected by zeropoint) | `"jellyfin"` |
 | `zp_network_name` | string | Pre-created Docker network name (injected by zeropoint) | (required) |
 | `zp_arch` | string | Target architecture: amd64, arm64, etc. (injected by zeropoint) | `"amd64"` |
 | `zp_gpu_vendor` | string | GPU vendor: nvidia, amd, intel, or empty for no GPU (injected by zeropoint) | `""` |
 | `zp_module_dir` | string | Agent's working directory for this module — terraform state + cloned source (injected by zeropoint) | (required) |
-| `zp_storage_dir` | string | Isolated data root for this module — all bind mounts must live under here (injected by zeropoint) | (required) |
-| `config_dir` | string | Jellyfin configuration directory | `${zp_storage_dir}/.config` |
-| `cache_dir` | string | Jellyfin cache/transcoding directory | `${zp_storage_dir}/.cache` |
-| `media_library_path` | string | Path to media library | `${zp_storage_dir}/media` |
+| `zp_storage_dir` | string | Isolated data root for this module's config, cache, and default media library (injected by zeropoint) | (required) |
+| `config_dir` | string | Jellyfin configuration directory | `null` (uses `${zp_storage_dir}/.config`) |
+| `cache_dir` | string | Jellyfin cache/transcoding directory | `null` (uses `${zp_storage_dir}/.cache`) |
+| `media_library_path` | string | Legacy media root mounted read-only at `/media` | `null` (uses `${zp_storage_dir}/media` when no typed path is set) |
+| `movies_path` | string | Movies library mounted read-only at `/media/movies` | `null` |
+| `tv_path` | string | TV library mounted read-only at `/media/tv` | `null` |
+| `music_path` | string | Music library mounted read-only at `/media/music` | `null` |
+| `music_videos_path` | string | Music videos library mounted read-only at `/media/music-videos` | `null` |
+| `books_path` | string | Books library mounted read-only at `/media/books` | `null` |
+| `photos_path` | string | Photos library mounted read-only at `/media/photos` | `null` |
+| `home_videos_path` | string | Home videos library mounted read-only at `/media/home-videos` | `null` |
 
 ## Outputs
 
@@ -75,13 +90,26 @@ The GPU vendor is auto-detected by zeropoint and injected via the `gpu_vendor` v
 
 ## Storage and Volumes
 
-The module creates three persistent volume mounts:
+Configuration and cache data remain in the module's storage root by default:
 
-1. **Config Directory** (`/config`): Jellyfin configuration, database, and metadata
-2. **Cache Directory** (`/cache`): Transcoded files and temporary cache
-3. **Media Library** (`/media`): Read-only mount for media files
+- **Config Directory** (`/config`): `${zp_storage_dir}/.config`
+- **Cache Directory** (`/cache`): `${zp_storage_dir}/.cache`
 
-All paths default to subdirectories under `zp_storage_dir` but can be customized via input variables.
+Media mounts are always read-only. Their selection is backward compatible:
+
+- When `media_library_path` is set, it is mounted at `/media`. Any configured typed paths are also mounted at their category paths.
+- When `media_library_path` is `null` and no typed paths are set, `${zp_storage_dir}/media` is mounted at `/media`.
+- When one or more typed paths are set and `media_library_path` is `null`, the generic `/media` mount is omitted and only the configured category paths are mounted.
+
+| Input | Container path |
+|-------|----------------|
+| `movies_path` | `/media/movies` |
+| `tv_path` | `/media/tv` |
+| `music_path` | `/media/music` |
+| `music_videos_path` | `/media/music-videos` |
+| `books_path` | `/media/books` |
+| `photos_path` | `/media/photos` |
+| `home_videos_path` | `/media/home-videos` |
 
 ## Network & Service Discovery
 

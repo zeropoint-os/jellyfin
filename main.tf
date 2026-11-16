@@ -13,7 +13,7 @@ variable "zp_module_id" {
   description = "Unique identifier for this module instance (user-defined, freeform)"
 }
 
- variable "zp_network_name" {
+variable "zp_network_name" {
   type        = string
   description = "Pre-created Docker network name for this module (managed by zeropoint)"
 }
@@ -37,7 +37,7 @@ variable "zp_module_dir" {
 
 variable "zp_storage_dir" {
   type        = string
-  description = "Isolated data root for this module (injected by zeropoint). All bind mounts MUST be under this path so the agent can move user data when zp_storage_dir is edited (atomic same-fs, rsync-and-swap cross-fs)."
+  description = "Isolated data root for this module's configuration, cache, and default media library (injected by zeropoint)."
 }
 
 variable "config_dir" {
@@ -55,7 +55,96 @@ variable "cache_dir" {
 variable "media_library_path" {
   type        = string
   default     = null
-  description = "Media library path"
+  description = "Media library path mounted read-only at /media"
+}
+
+variable "movies_path" {
+  type        = string
+  default     = null
+  description = "Movies library path mounted read-only at /media/movies"
+}
+
+variable "tv_path" {
+  type        = string
+  default     = null
+  description = "TV library path mounted read-only at /media/tv"
+}
+
+variable "music_path" {
+  type        = string
+  default     = null
+  description = "Music library path mounted read-only at /media/music"
+}
+
+variable "music_videos_path" {
+  type        = string
+  default     = null
+  description = "Music videos library path mounted read-only at /media/music-videos"
+}
+
+variable "books_path" {
+  type        = string
+  default     = null
+  description = "Books library path mounted read-only at /media/books"
+}
+
+variable "photos_path" {
+  type        = string
+  default     = null
+  description = "Photos library path mounted read-only at /media/photos"
+}
+
+variable "home_videos_path" {
+  type        = string
+  default     = null
+  description = "Home videos library path mounted read-only at /media/home-videos"
+}
+
+locals {
+  typed_media_volumes = {
+    movies = {
+      host_path      = var.movies_path
+      container_path = "/media/movies"
+    }
+    tv = {
+      host_path      = var.tv_path
+      container_path = "/media/tv"
+    }
+    music = {
+      host_path      = var.music_path
+      container_path = "/media/music"
+    }
+    music_videos = {
+      host_path      = var.music_videos_path
+      container_path = "/media/music-videos"
+    }
+    books = {
+      host_path      = var.books_path
+      container_path = "/media/books"
+    }
+    photos = {
+      host_path      = var.photos_path
+      container_path = "/media/photos"
+    }
+    home_videos = {
+      host_path      = var.home_videos_path
+      container_path = "/media/home-videos"
+    }
+  }
+
+  configured_typed_media_volumes = {
+    for name, volume in local.typed_media_volumes : name => volume
+    if volume.host_path != null
+  }
+
+  generic_media_volumes = var.media_library_path != null || length(local.configured_typed_media_volumes) == 0 ? {
+    media = {
+      host_path      = var.media_library_path != null ? var.media_library_path : "${var.zp_storage_dir}/media"
+      container_path = "/media"
+    }
+  } : {}
+
+  media_volumes = merge(local.generic_media_volumes, local.configured_typed_media_volumes)
 }
 
 # Build Jellyfin image from local Dockerfile
@@ -64,7 +153,7 @@ resource "docker_image" "jellyfin" {
   build {
     context    = path.module
     dockerfile = "Dockerfile"
-    platform   = "linux/${var.zp_arch}"  # Uses injected zp_arch variable
+    platform   = "linux/${var.zp_arch}" # Uses injected zp_arch variable
   }
   keep_locally = true
 }
@@ -98,18 +187,22 @@ resource "docker_container" "jellyfin_main" {
     host_path      = var.config_dir != null ? var.config_dir : "${var.zp_storage_dir}/.config"
     container_path = "/config"
   }
-  
+
   # Cache/Transcoding
   volumes {
     host_path      = var.cache_dir != null ? var.cache_dir : "${var.zp_storage_dir}/.cache"
     container_path = "/cache"
   }
-  
-  # Media Library
-  volumes {
-    host_path      = var.media_library_path != null ? var.media_library_path : "${var.zp_storage_dir}/media"
-    container_path = "/media"
-    read_only      = true
+
+  # Media libraries
+  dynamic "volumes" {
+    for_each = local.media_volumes
+
+    content {
+      host_path      = volumes.value.host_path
+      container_path = volumes.value.container_path
+      read_only      = true
+    }
   }
 
   # Ports exposed internally (no host binding)
@@ -126,11 +219,11 @@ output "main" {
 output "main_ports" {
   value = {
     web = {
-      port        = 8096                    # Jellyfin web interface port
-      protocol    = "http"                  # The protocol used
-      transport   = "tcp"                   # Transport layer
+      port        = 8096                     # Jellyfin web interface port
+      protocol    = "http"                   # The protocol used
+      transport   = "tcp"                    # Transport layer
       description = "Jellyfin web interface" # Description of the port
-      default     = true                    # Default port for the service
+      default     = true                     # Default port for the service
     }
   }
   description = "Service ports for external access"
