@@ -18,12 +18,6 @@ variable "zp_network_name" {
   description = "Pre-created Docker network name for this module (managed by zeropoint)"
 }
 
-variable "zp_arch" {
-  type        = string
-  default     = "amd64"
-  description = "Target architecture - amd64, arm64, etc. (injected by zeropoint)"
-}
-
 variable "zp_gpu_vendor" {
   type        = string
   default     = ""
@@ -147,14 +141,9 @@ locals {
   media_volumes = merge(local.generic_media_volumes, local.configured_typed_media_volumes)
 }
 
-# Build Jellyfin image from local Dockerfile
+# Official Jellyfin 12.4 multi-architecture image, pinned by manifest digest.
 resource "docker_image" "jellyfin" {
-  name = "${var.zp_module_id}:latest"
-  build {
-    context    = path.module
-    dockerfile = "Dockerfile"
-    platform   = "linux/${var.zp_arch}" # Uses injected zp_arch variable
-  }
+  name         = "jellyfin/jellyfin:12.4@sha256:fea863d0cd9ec445985d9c75fc6ed64e38a1d2766cf0c250a33d553f4fc1b771"
   keep_locally = true
 }
 

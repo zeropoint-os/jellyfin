@@ -4,7 +4,7 @@ This module defines the Jellyfin app for zeropoint os using Terraform and the Do
 
 ## Resources Created
 
-- **Docker Image**: Builds from local `Dockerfile` with platform-specific targeting
+- **Docker Image**: Pulls the official Jellyfin multi-architecture image by immutable digest
 - **Docker Container**: Jellyfin media server with optional GPU support for transcoding
 
 ## Requirements
@@ -21,24 +21,28 @@ This module defines the Jellyfin app for zeropoint os using Terraform and the Do
 ### Via zeropoint API
 
 ```bash
-curl -X POST http://<zeropoint-node-name>:2370/modules/install \
+curl -X POST http://<zeropoint-node-name>:2370/api/modules \
   -H "Content-Type: application/json" \
   -d '{
-    "source": "https://github.com/zeropoint-os/jellyfin.git", 
-    "module_id": "jellyfin",
-    "arch": "arm64",
-    "gpu_vendor": "nvidia",
-    "movies_path": "/data/media/movies",
-    "tv_path": "/data/media/tv",
-    "music_path": "/data/media/music"
+    "source": "https://github.com/zeropoint-os/jellyfin.git@<40-character-commit-sha>",
+    "overrides": {
+      "movies_path": "/data/media/movies",
+      "tv_path": "/data/media/tv",
+      "music_path": "/data/media/music"
+    },
+    "resolve": true
   }'
 ```
+
+Replace `<40-character-commit-sha>` with the exact Jellyfin module revision to install. Unpinned branch and tag references are not recommended for reproducible deployments.
 
 Each configured category is mounted read-only at a stable path under `/media`. Existing installations can continue using `media_library_path` to mount one read-only library root at `/media`:
 
 ```json
 {
-  "media_library_path": "/data/jellyfin/media"
+  "overrides": {
+    "media_library_path": "/data/jellyfin/media"
+  }
 }
 ```
 
@@ -56,7 +60,6 @@ The install will be performed using Docker-in-Docker.
 |------|------|-------------|---------|
 | `zp_module_id` | string | Unique identifier for this module instance (injected by zeropoint) | `"jellyfin"` |
 | `zp_network_name` | string | Pre-created Docker network name (injected by zeropoint) | (required) |
-| `zp_arch` | string | Target architecture: amd64, arm64, etc. (injected by zeropoint) | `"amd64"` |
 | `zp_gpu_vendor` | string | GPU vendor: nvidia, amd, intel, or empty for no GPU (injected by zeropoint) | `""` |
 | `zp_module_dir` | string | Agent's working directory for this module — terraform state + cloned source (injected by zeropoint) | (required) |
 | `zp_storage_dir` | string | Isolated data root for this module's config, cache, and default media library (injected by zeropoint) | (required) |
@@ -78,6 +81,10 @@ The install will be performed using Docker-in-Docker.
 | `main` | Main Jellyfin container resource (docker_container) |
 | `main_ports` | Service ports for external access |
 
+## Immutable Jellyfin Image
+
+The module uses the official stable Jellyfin `12.4` multi-architecture image pinned to manifest digest `sha256:fea863d0cd9ec445985d9c75fc6ed64e38a1d2766cf0c250a33d553f4fc1b771`. The digest resolves to the `linux/amd64` and `linux/arm64` images published for that release, preventing a mutable tag from changing deployed code.
+
 ## GPU Support for Transcoding
 
 This module supports hardware-accelerated transcoding via GPU:
@@ -86,7 +93,7 @@ This module supports hardware-accelerated transcoding via GPU:
 - **AMD/Intel**: Sets `gpus = "all"` (uses default runtime with device access)
 - **No GPU**: Both runtime and gpus set to null (CPU-only transcoding)
 
-The GPU vendor is auto-detected by zeropoint and injected via the `gpu_vendor` variable.
+The GPU vendor is auto-detected by zeropoint and injected via the `zp_gpu_vendor` variable.
 
 ## Storage and Volumes
 
